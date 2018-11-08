@@ -13,13 +13,11 @@ import io.vertx.ext.web.client.WebClientOptions
 import java.lang.management.ManagementFactory
 import java.util.logging.Logger
 
-const val NUM_REQUESTS = 15
-const val TIMEOUT:Long = 9000
+const val NUM_REQUESTS = 20
+const val TIMEOUT:Long = 8000
 val logger: Logger = Logger.getLogger("Main")
 
 fun main(args: Array<String>){
-
-    logger.info("STARTING...")
     //get the PID of the process
     logger.info("PID " + ManagementFactory.getRuntimeMXBean().name)
     (1..100).forEach {
