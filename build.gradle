@@ -47,7 +47,7 @@ repositories {
 
 // Dependencies of the project
 dependencies {
-  compile 'io.vertx:vertx-web-client:3.5.4'
+    compile 'io.vertx:vertx-web-client:3.5.4'
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     compile group: 'org.slf4j', name: 'slf4j-simple', version: '1.7.25'
 }

@@ -11,35 +11,42 @@ import java.util.concurrent.TimeUnit
 import io.vertx.ext.web.client.WebClient
 import io.vertx.ext.web.client.WebClientOptions
 import java.lang.management.ManagementFactory
+import java.util.logging.Logger
 
 const val NUM_REQUESTS = 15
-const val TIMEOUT:Long = 8000
+const val TIMEOUT:Long = 9000
+val logger: Logger = Logger.getLogger("Main")
 
 fun main(args: Array<String>){
-    println("PID " + ManagementFactory.getRuntimeMXBean().name)
-    Thread.sleep(1000)
+
+    logger.info("STARTING...")
+    //get the PID of the process
+    logger.info("PID " + ManagementFactory.getRuntimeMXBean().name)
     (1..100).forEach {
         println("Running iteration $it")
-        Session().run { vertx ->
-            val webClientOptions = WebClientOptions()
-            webClientOptions.isSsl = true
+        // .use will auto-close the session and clean up any netty things
+        Session().use {
+            it.run { vertx ->
+                val webClientOptions = WebClientOptions()
+                webClientOptions.isSsl = true
 
-            val webClient = WebClient.create(vertx, webClientOptions)
+                val webClient = WebClient.create(vertx, webClientOptions)
 
-            CompositeFuture.join((1..NUM_REQUESTS).map {
-                val responseFuture = Future.future<HttpResponse<Buffer>>()
-                val mappedFuture = Future.future<HttpResponse<Buffer>>()
-                responseFuture.setHandler {
-                    System.err.println("response returned with success? ${it.succeeded()}. cause: ${it.cause()}")
-                    mappedFuture.complete()
-                }
-                val request = webClient.get(443, "httpbin.org","/delay/$it")
-                request.timeout(TIMEOUT)
-                request.send(responseFuture)
-                mappedFuture
-            })
+                CompositeFuture.join((1..NUM_REQUESTS).map {
+                    val responseFuture = Future.future<HttpResponse<Buffer>>()
+                    val mappedFuture = Future.future<HttpResponse<Buffer>>()
+                    responseFuture.setHandler {
+                        logger.info("response returned with success? ${it.succeeded()}. cause: ${it.cause()}")
+                        mappedFuture.complete()
+                    }
+                    val request = webClient.get(443, "httpbin.org", "/delay/${it % 10}")
+                    request.timeout(TIMEOUT)
+                    request.send(responseFuture)
+                    mappedFuture
+                })
+            }
         }
-        println("Ending iteration $it")
+        logger.info("Ending iteration $it")
     }
 }
 
@@ -50,6 +57,7 @@ fun main(args: Array<String>){
  * @param closeTimeout amount of time to wait for each Netty object to shut down
  */
 class Session(private val closeTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)) : AutoCloseable {
+    private val logger = Logger.getLogger("Session")
     private val vertx: Vertx
     // Since vertx.close() is asynchronous; wait until the close completes by using a latch. This is used in
     // awaitTermination().
@@ -64,12 +72,12 @@ class Session(private val closeTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)) 
      * Both are seemingly necessary parts of using Netty that we need to wait for to die before moving on.
      */
     private val shutdownObjs = listOf(
-            ShutdownObj("GlobalEventExecutor", { timeout, unit ->
+            ShutdownObj("GlobalEventExecutor") { timeout, unit ->
                 GlobalEventExecutor.INSTANCE.awaitInactivity(timeout, unit)
-            }),
-            ShutdownObj("ThreadDeathWatcher", { timeout, unit ->
+            },
+            ShutdownObj("ThreadDeathWatcher") { timeout, unit ->
                 ThreadDeathWatcher.awaitInactivity(timeout, unit)
-            })
+            }
     )
 
     init {
@@ -100,22 +108,29 @@ class Session(private val closeTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)) 
                 cause = asyncResult.cause()
                 // Release the user code result latch
                 resultLatch.countDown()
-                // Initiate shutdown of the event loop
-                System.err.println(CLOSE_ID)
-                vertx.close { closeLatch.countDown() }
+                if(resultLatch.count == 0L){
+                    // Initiate shutdown of the event loop
+                    logger.info(CLOSE_ID)
+                    vertx.close {
+                        logger.info("Event loop shutdown complete.")
+                        closeLatch.countDown()
+                    }
+                } else{
+                    logger.info("waiting to shut down event loop...")
+                }
             }
-            System.err.println("Waiting for Vert.x user code Future to complete")
+            logger.info("Waiting for Vert.x user code Future to complete")
             resultLatch.await()
         }
         // Note: We use the !! operator here because we know that result and cause will be populated if the Future
         // succeeded or failed, respectively.
         if (success) {
-            System.err.println("Vert.x user code completed successfully")
+            logger.info("Vert.x user code completed successfully")
             return result!!
         }
-        System.err.println("Vert.x user code completed with error")
+        logger.info("Vert.x user code completed with error")
         //we don't care about the result, but print the cause if exists
-        println(cause)
+        logger.info(cause.toString())
         return null
     }
 
@@ -123,18 +138,18 @@ class Session(private val closeTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)) 
      * Wait for Vert.x and Netty to terminate.
      */
     override fun close() {
-        System.err.println("Waiting for Vert.x event loop to close")
+        logger.info("Waiting for Vert.x event loop to close")
         closeLatch.await()
-        System.err.println(CLOSE_ID)
+        logger.info(CLOSE_ID)
         time("Shutting down Netty") {
             // See here: https://github.com/netty/netty/issues/2084#issuecomment-44822314
             shutdownObjs.forEach { obj ->
                 if (time("Waiting up to ${closeTimeout.value} ${closeTimeout.unit.toString().toLowerCase()} for ${obj.name} to shut down") {
                             obj.awaitInactivity(closeTimeout.value, closeTimeout.unit)
                         }) {
-                    System.err.println("${obj.name} shut down successfully")
+                    logger.info("${obj.name} shut down successfully")
                 } else {
-                    System.err.println("${obj.name} failed to shut down!")
+                    logger.info("${obj.name} failed to shut down!")
                 }
             }
         }
@@ -142,8 +157,6 @@ class Session(private val closeTimeout: Timeout = Timeout(5, TimeUnit.SECONDS)) 
 
     companion object {
         private const val CLOSE_ID = "Closing Vert.x event loop"
-        private const val TEST_LOG_MESSAGE = "Testing Vert.x logging"
-        private const val LOGGER_FACTORY_CLASS_NAME = "vertxuno.vertx.LogDelegateFactory"
     }
 }
 
@@ -152,11 +165,11 @@ data class Timeout(val value: Long, val unit: TimeUnit) {
 }
 
 fun <T> time(message: String, body: () -> T): T{
-    System.err.println("Starting $message")
+    logger.info("Starting $message")
     return try{
         body()
     } finally {
-        System.err.println("Ending $message")
+        logger.info("Ending $message")
     }
 }
 
