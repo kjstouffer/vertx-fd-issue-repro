@@ -1,5 +1,3 @@
-group 'com.bluemedora'
-
 buildscript {
     // Build script variables
     ext {
@@ -33,14 +31,6 @@ mainClassName = "MainKt"
 
 // Set up repositories for library dependencies
 repositories {
-    // Look for Vertxuno in our Artifactory
-    maven {
-        url 'https://bluemedora.jfrog.io/bluemedora/libs-release-local'
-        credentials {
-            username = artifactory_user
-            password = artifactory_password
-        }
-    }
     // Look for the rest in JCenter
     jcenter()
 }
