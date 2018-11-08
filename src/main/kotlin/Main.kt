@@ -12,16 +12,20 @@ import io.vertx.ext.web.client.WebClient
 import io.vertx.ext.web.client.WebClientOptions
 import java.lang.management.ManagementFactory
 import java.util.logging.Logger
+import com.sun.management.UnixOperatingSystemMXBean
 
-const val NUM_REQUESTS = 20
+
+
+const val NUM_REQUESTS = 10
 const val TIMEOUT:Long = 8000
 val logger: Logger = Logger.getLogger("Main")
 
 fun main(args: Array<String>){
     //get the PID of the process
     logger.info("PID " + ManagementFactory.getRuntimeMXBean().name)
+    val os = ManagementFactory.getOperatingSystemMXBean() as UnixOperatingSystemMXBean
     (1..100).forEach {
-        println("Running iteration $it")
+        logger.info("Running iteration $it")
         // .use will auto-close the session and clean up any netty things
         Session().use {
             it.run { vertx ->
@@ -45,6 +49,7 @@ fun main(args: Array<String>){
             }
         }
         logger.info("Ending iteration $it")
+        logger.info("Number of open fd (post-loop): " + os.openFileDescriptorCount)
     }
 }
 
