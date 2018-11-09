@@ -16,7 +16,7 @@ import com.sun.management.UnixOperatingSystemMXBean
 
 
 
-const val NUM_REQUESTS = 10
+const val NUM_REQUESTS = 20
 const val TIMEOUT:Long = 8000
 val logger: Logger = Logger.getLogger("Main")
 
@@ -34,7 +34,7 @@ fun main(args: Array<String>){
 
                 val webClient = WebClient.create(vertx, webClientOptions)
 
-                CompositeFuture.join((1..NUM_REQUESTS).map {
+                val futures = CompositeFuture.join((1..NUM_REQUESTS).map {
                     val responseFuture = Future.future<HttpResponse<Buffer>>()
                     val mappedFuture = Future.future<HttpResponse<Buffer>>()
                     responseFuture.setHandler {
@@ -46,6 +46,10 @@ fun main(args: Array<String>){
                     request.send(responseFuture)
                     mappedFuture
                 })
+
+                webClient.close()
+                logger.info("Web client closed")
+                futures
             }
         }
         logger.info("Ending iteration $it")
