@@ -6,7 +6,13 @@ repo that exhibits the issue: github.com/kjstouffer/vertx-fd-issue-repro
 
 run with `./gradlew run`
 The PID of the process is logged, eg `INFO: PID 95891@keiths-mbp`  
-watch file total file descriptors open with:
+
+The number of open file descriptors is logged after each iteration with the log message:
+```
+logger.info("Time spent: $timeSpent Seconds. Number of open fd: " + os.openFileDescriptorCount)
+```
+
+you can also watch file total file descriptors open with:
 ```
 watch 'lsof -p $PID | wc -l'
 ```
